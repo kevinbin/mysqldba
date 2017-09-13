@@ -1,0 +1,10 @@
+package: github.com/kevinbin/mysqlmon
+import:
+- package: github.com/go-sql-driver/mysql
+  version: v1.3
+- package: github.com/logrusorgru/aurora
+- package: github.com/shirou/gopsutil
+  version: v2.17.08
+  subpackages:
+  - load
+- package: github.com/spf13/cobra
