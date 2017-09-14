@@ -28,7 +28,6 @@ import (
 	"github.com/logrusorgru/aurora"
 	"github.com/shirou/gopsutil/load"
 	"github.com/spf13/cobra"
-	"log"
 	"math"
 	"os"
 	"os/signal"
@@ -267,17 +266,6 @@ func rename(f string) {
 		n := f + "_" + time.Now().Format("20160102150405")
 		os.Rename(f, n)
 		fmt.Printf("Output file: %s \n", n)
-	}
-}
-func ifErrWithPanic(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-func ifErrWithLog(err error) {
-	if err != nil {
-		log.Fatal(err)
 	}
 }
 

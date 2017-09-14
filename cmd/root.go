@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"github.com/logrusorgru/aurora"
 	"github.com/spf13/cobra"
+	"log"
 	"os"
 	"strconv"
 )
@@ -93,4 +94,16 @@ func byteHumen(i int64) aurora.Value {
 
 	}
 
+}
+
+func ifErrWithPanic(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func ifErrWithLog(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
 }
