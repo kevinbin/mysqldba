@@ -45,9 +45,9 @@ const (
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
-	Use:   "mysqlmon",
-	Short: "Welcome to the MySQL Toolbox.",
-	Long:  "Welcome to the MySQL Toolbox. \n\nVersion: " + version,
+	Use:   "mysqldba",
+	Short: "Welcome to the MySQL DBA Toolbox.",
+	Long:  "Welcome to the MySQL DBA Toolbox. \n\nVersion: " + version,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	//	Run: func(cmd *cobra.Command, args []string) { },

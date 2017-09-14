@@ -34,7 +34,7 @@ var rbr2sbrCmd = &cobra.Command{
 	Short: "Convert a rbr binary log to sbr format",
 	Long: `Convert a rbr binary log to sbr format
 For example:
-$ mysqlbinlog -v --base64-output=DECODE-ROWS mysql-bin.000006 | mysqlmon rbr2sbr | pt-query-digest --type=binlog --order-by Query_time:cnt --group-by fingerprint
+$ mysqlbinlog -v --base64-output=DECODE-ROWS mysql-bin.000006 | mysqldba rbr2sbr | pt-query-digest --type=binlog --order-by Query_time:cnt --group-by fingerprint
 	`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("rbr2sbr called")

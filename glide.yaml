@@ -1,4 +1,4 @@
-package: github.com/kevinbin/mysqlmon
+package: github.com/kevinbin/mysqldba
 import:
 - package: github.com/go-sql-driver/mysql
   version: v1.3

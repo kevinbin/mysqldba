@@ -1,15 +1,15 @@
 ##Install
 ```
-go get github.com/kevinbin/mysqlmon   
+go get github.com/kevinbin/mysqldba   
 ```
 ## Usage
 ```
-Welcome to the MySQL Toolbox. 
+Welcome to the MySQL DBA Toolbox. 
 
 Version: 1.0
 
 Usage:
-  mysqlmon [command]
+  mysqldba [command]
 
 Available Commands:
   help        Help about any command
@@ -23,7 +23,7 @@ Flags:
   -P, --port int          mysql server port (default 3306)
   -u, --user string       mysql login user (default "root")
 
-Use "mysqlbox [command] --help" for more information about a command.
+Use "mysqldba [command] --help" for more information about a command.
 ```
 
 
