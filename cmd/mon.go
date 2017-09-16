@@ -263,17 +263,10 @@ func getGtid(db *sql.DB) string {
 
 func rename(f string) {
 	if _, err := os.Stat(f); err == nil {
-		n := f + "_" + time.Now().Format("20160102150405")
+		n := f + "_" + time.Now().Format("20060102150405")
 		os.Rename(f, n)
 		fmt.Printf("Output file: %s \n", n)
 	}
-}
-
-func mysqlConnect() *sql.DB {
-	dsn := fmt.Sprintf("%s:%s@(%s:%d)/", dbUser, dbPassWd, dbHost, dbPort)
-	db, err := sql.Open("mysql", dsn)
-	ifErrWithLog(err)
-	return db
 }
 
 func monitor() {

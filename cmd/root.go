@@ -21,9 +21,13 @@
 package cmd
 
 import (
+	"archive/tar"
+	"compress/gzip"
+	"database/sql"
 	"fmt"
 	"github.com/logrusorgru/aurora"
 	"github.com/spf13/cobra"
+	"io"
 	"log"
 	"os"
 	"strconv"
@@ -106,4 +110,56 @@ func ifErrWithLog(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func mysqlConnect() *sql.DB {
+	dsn := fmt.Sprintf("%s:%s@(%s:%d)/", dbUser, dbPassWd, dbHost, dbPort)
+	db, err := sql.Open("mysql", dsn)
+	ifErrWithLog(err)
+	return db
+}
+
+func tarIt(src string, des string) error {
+	fi, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	fw, err := os.Create(des)
+	if err != nil {
+		return err
+	}
+	defer fw.Close()
+
+	gzw := gzip.NewWriter(fw)
+
+	defer gzw.Close()
+
+	tw := tar.NewWriter(gzw)
+	defer tw.Close()
+
+	// create a new dir/file header
+	header, err := tar.FileInfoHeader(fi, fi.Name())
+	if err != nil {
+		return err
+	}
+
+	// write the header
+	if err := tw.WriteHeader(header); err != nil {
+		return err
+	}
+
+	// open files for taring
+	f, err := os.Open(src)
+	defer f.Close()
+	if err != nil {
+		return err
+	}
+
+	// copy file data into tar writer
+	if _, err := io.Copy(tw, f); err != nil {
+		return err
+	}
+
+	return nil
 }
