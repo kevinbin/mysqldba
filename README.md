@@ -15,6 +15,7 @@ Available Commands:
   help        Help about any command
   monitor     A MySQL monitor like iostat
   rbr2sbr     Convert a rbr binary log to sbr format
+  repairGtid  Compare master(source) and slave(destination) GTID to find inconsistent
   slowlog     Capture MySQL slow log
 
 Flags:
