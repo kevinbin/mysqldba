@@ -112,11 +112,25 @@ func ifErrWithLog(err error) {
 	}
 }
 
-func mysqlConnect() *sql.DB {
-	dsn := fmt.Sprintf("%s:%s@(%s:%d)/", dbUser, dbPassWd, dbHost, dbPort)
+func mysqlConnect(dsn string) *sql.DB {
 	db, err := sql.Open("mysql", dsn)
 	ifErrWithLog(err)
 	return db
+}
+
+func mysqlSimpleQuery(q string, db *sql.DB) string {
+	rows, err := db.Query(q)
+	ifErrWithLog(err)
+	defer rows.Close()
+	var r string
+
+	if rows.Next() {
+		err := rows.Scan(&r)
+		ifErrWithLog(err)
+	}
+	err = rows.Err()
+	ifErrWithLog(err)
+	return r
 }
 
 func tarIt(src string, des string) error {

@@ -47,7 +47,8 @@ $ mysqldba slowlog -u user -p pass -d /path -l 60 -t 0.1`,
 }
 
 func run() {
-	db := mysqlConnect()
+	dsn := fmt.Sprintf("%s:%s@(%s:%d)/", dbUser, dbPassWd, dbHost, dbPort)
+	db := mysqlConnect(dsn)
 	res := getLogConfig(db)
 	getSlowLog(db, res)
 

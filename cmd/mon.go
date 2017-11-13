@@ -245,22 +245,6 @@ func gtidSub(s string) int {
 	return gtidDiff
 }
 
-func getGtid(db *sql.DB) string {
-	gtidSQL := fmt.Sprintf("select gtid_subtract('%s', '%s') as gtid_diff", slave["Retrieved_Gtid_Set"], slave["Executed_Gtid_Set"])
-	rows, err := db.Query(gtidSQL)
-	ifErrWithLog(err)
-	defer rows.Close()
-	var statusCol string
-
-	if rows.Next() {
-		err := rows.Scan(&statusCol)
-		ifErrWithLog(err)
-	}
-	err = rows.Err()
-	ifErrWithLog(err)
-	return statusCol
-}
-
 func rename(f string) {
 	if _, err := os.Stat(f); err == nil {
 		n := f + "_" + time.Now().Format("20060102150405")
@@ -279,7 +263,9 @@ func monitor() {
 		rename("monitor")
 		os.Exit(1)
 	}()
-	db := mysqlConnect()
+	dsn := fmt.Sprintf("%s:%s@(%s:%d)/", dbUser, dbPassWd, dbHost, dbPort)
+
+	db := mysqlConnect(dsn)
 
 	for {
 		showSlaveStatus(db)
@@ -385,7 +371,8 @@ func monitor() {
 		}
 
 		if !slaveCol && !gtidCol && slave["Retrieved_Gtid_Set"] != nil {
-			gtidN = gtidSub(getGtid(db))
+			gtidSQL := fmt.Sprintf("select gtid_subtract('%s', '%s') as gtid_diff", slave["Retrieved_Gtid_Set"], slave["Executed_Gtid_Set"])
+			gtidN = gtidSub(mysqlSimpleQuery(gtidSQL, db))
 
 			o.lineOne += "-GTID-+"
 			o.lineTwo += "  num |"
