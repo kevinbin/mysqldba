@@ -79,10 +79,11 @@ func genEmptyTrx(s string) {
 		if strings.Contains(strings.Split(v, ":")[1], "-") {
 			gtidNum := strings.Split(strings.Split(v, ":")[1], "-")
 			for i := strToInt(gtidNum[0]); i <= strToInt(gtidNum[1]); i++ {
-				fmt.Printf("SET GTID_NEXT='%s:%v';BEGIN;COMMIT;\n", uuid, i)
+
+				fmt.Printf("SET GTID_NEXT='%v:%v';BEGIN;COMMIT;\n", strings.TrimLeft(uuid, "\n"), i)
 			}
 		} else {
-			fmt.Printf("SET GTID_NEXT='%s';BEGIN;COMMIT;\n", v)
+			fmt.Printf("SET GTID_NEXT='%s';BEGIN;COMMIT;\n", strings.TrimLeft(v, "\n"))
 		}
 	}
 	fmt.Printf("SET GTID_NEXT=AUTOMATIC;")
