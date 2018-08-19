@@ -100,6 +100,21 @@ func byteHumen(i int64) aurora.Value {
 
 }
 
+func numHumen(i int64) aurora.Value {
+
+	switch {
+
+	case i >= 1000 && i < 10000:
+		return aurora.Green(strconv.FormatInt(i/1000, 10) + "K")
+	case i >= 10000:
+		return aurora.Red(strconv.FormatInt(i/1000, 10) + "K")
+	default:
+		return aurora.Green(strconv.FormatInt(i, 10))
+
+	}
+
+}
+
 func ifErrWithPanic(err error) {
 	if err != nil {
 		panic(err)
