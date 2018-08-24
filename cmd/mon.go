@@ -73,7 +73,7 @@ var (
 	slaveCol, gtidCol, cpuLoad, rowLockCol                     bool
 )
 
-type Oput struct {
+type oput struct {
 	lineCSV []int64
 
 	lineOne  string
@@ -288,7 +288,7 @@ func monitor() {
 			count++
 			continue
 		}
-		o := Oput{lineOne: "+-------+", lineTwo: "--Time--|", lineEnd: "--------+"}
+		o := oput{lineOne: "+-------+", lineTwo: "--Time--|", lineEnd: "--------+"}
 
 		t := time.Now()
 		o.lineData += fmt.Sprintf("%8v|", aurora.Blue(t.Format("15:04:05")))
