@@ -85,13 +85,13 @@ func byteHumen(i int64) aurora.Value {
 	switch {
 
 	case i >= 1024 && i < 1048576:
-		return aurora.Green(strconv.FormatInt(i/1024, 10) + "K")
+		return aurora.Green(strconv.FormatInt(i/1024, 10) + "KB")
 
 	case i >= 1048576 && i < 1073741824:
-		return aurora.Brown(strconv.FormatInt(i/1048576, 10) + "M")
+		return aurora.Brown(strconv.FormatInt(i/1048576, 10) + "MB")
 
 	case i >= 1073741824:
-		return aurora.Red(strconv.FormatInt(i/1073741824, 10) + "G")
+		return aurora.Red(strconv.FormatInt(i/1073741824, 10) + "GB")
 
 	default:
 		return aurora.Green(strconv.FormatInt(i, 10) + "B")

@@ -86,7 +86,7 @@ func init() {
 	RootCmd.AddCommand(monCmd)
 
 	monCmd.Flags().Int64VarP(&interval, "interval", "i", 1, "interval")
-	monCmd.Flags().BoolVar(&innodbState, "skip_innodb_status", false, "skip collect show engine innodb status output")
+	monCmd.Flags().BoolVar(&innodbState, "innodb_status", false, "skip collect show engine innodb status output")
 	monCmd.Flags().BoolVar(&netCol, "skip_net", false, "skip output mysql network through")
 	monCmd.Flags().BoolVar(&ibBufferCol, "skip_ib_buffer", false, "skip output innodb buffer page status")
 	monCmd.Flags().BoolVar(&ibRowCol, "skip_ib_row", false, "skip output innodb row operate")
@@ -100,7 +100,7 @@ func init() {
 	monCmd.Flags().BoolVar(&gtidCol, "skip_gtid", false, "skip output slave Retrieved & Executed gtid diff ")
 	monCmd.Flags().BoolVar(&cpuLoad, "skip_load", false, "skip output system load")
 	monCmd.Flags().BoolVar(&saveCsv, "csv", false, "save output to csv file ")
-	monCmd.Flags().BoolVar(&rowLockCol, "row_lock", false, "output innodb row lock load")
+	monCmd.Flags().BoolVar(&rowLockCol, "skip_row_lock", false, "output innodb row lock load")
 
 }
 
@@ -116,7 +116,7 @@ func abs(i int64) int64 {
 }
 func showEngineInnodb(db *sql.DB) {
 
-	if !innodbState {
+	if innodbState {
 		// show engine innodb status
 		rows, err := db.Query(innodbStatusSQL)
 		ifErrWithLog(err)
@@ -189,8 +189,8 @@ func showGlobalStatus(db *sql.DB) {
 	innodbLogWriteRequest = (myStat["Innodb_log_write_requests"] - myStat2["Innodb_log_write_requests"]) / interval
 	innodbLogWrite = (myStat["Innodb_log_writes"] - myStat2["Innodb_log_writes"]) / interval
 
-	innodbRowLockTime = (myStat["Innodb_row_lock_time"] - myStat2["Innodb_row_lock_time"]) / 1000 // seconds
-	innodbRowLockWait = myStat["Innodb_row_lock_waits"] - myStat2["Innodb_row_lock_waits"]
+	innodbRowLockTime = (myStat["Innodb_row_lock_time"] - myStat2["Innodb_row_lock_time"]) / 1000 / interval // seconds
+	innodbRowLockWait = (myStat["Innodb_row_lock_waits"] - myStat2["Innodb_row_lock_waits"]) / interval
 	if innodbRowLockWait == 0 {
 		innodbRowLockAvgWait = 0
 	} else {
@@ -304,10 +304,10 @@ func monitor() {
 
 		}
 		if !qpsCol {
-			o.lineOne += "----Through----+"
-			o.lineTwo += "  QPS  |  TPS  |"
-			o.lineEnd += "-------+-------+"
-			o.lineData += fmt.Sprintf("%7v|%7v|", qps, tps)
+			o.lineOne += "---TPut--+"
+			o.lineTwo += " QPS| TPS|"
+			o.lineEnd += "----+----+"
+			o.lineData += fmt.Sprintf("%4v|%4v|", numHumen(qps), numHumen(tps))
 			o.lineCSV = append(o.lineCSV, qps, tps)
 
 		}
@@ -316,15 +316,15 @@ func monitor() {
 			o.lineOne += "----Thread----+"
 			o.lineTwo += " run  conn new|"
 			o.lineEnd += "--------------+"
-			o.lineData += fmt.Sprintf("%4v %5v %3v|", threadRunning, threadConnected, threadCreated)
+			o.lineData += fmt.Sprintf("%4v %4v %4v|", numHumen(threadRunning), numHumen(threadConnected), numHumen(threadCreated))
 			o.lineCSV = append(o.lineCSV, threadRunning, threadConnected, threadCreated)
 
 		}
 		if !comCol {
-			o.lineOne += "---------Com_Query---------+"
-			o.lineTwo += "select insert update delete|"
-			o.lineEnd += "---------------------------+"
-			o.lineData += fmt.Sprintf("%7v %6v %6v %6v|", comSelete, comInsert, comUpdate, comDelete)
+			o.lineOne += "-----Com_Query-----+"
+			o.lineTwo += " sel  ins  upd  del|"
+			o.lineEnd += "-------------------+"
+			o.lineData += fmt.Sprintf("%4v %4v %4v %4v|", numHumen(comSelete), numHumen(comInsert), numHumen(comUpdate), numHumen(comDelete))
 			o.lineCSV = append(o.lineCSV, comSelete, comInsert, comUpdate, comDelete)
 
 		}
@@ -332,42 +332,42 @@ func monitor() {
 			o.lineOne += "--Innodb Buffer State--+"
 			o.lineTwo += " data  free dirty flush|"
 			o.lineEnd += "-----------------------+"
-			o.lineData += fmt.Sprintf("%5s %5v %5s %5v|", numHumen(innodbBpData), innodbBpFree, numHumen(innodbBpDirty), innodbBpFlush)
+			o.lineData += fmt.Sprintf("%5v %5v %5v %5v|", numHumen(innodbBpData), numHumen(innodbBpFree), numHumen(innodbBpDirty), numHumen(innodbBpFlush))
 			o.lineCSV = append(o.lineCSV, innodbBpData, innodbBpFree, innodbBpDirty, innodbBpFlush)
 
 		}
 		if !ibRowCol {
-			o.lineOne += "------Innodb Row State-----+"
-			o.lineTwo += "select insert update delete|"
-			o.lineEnd += "---------------------------+"
-			o.lineData += fmt.Sprintf("%6s %6s %6s %6s|", numHumen(innodbReads), numHumen(innodbInsert), numHumen(innodbUpdate), numHumen(innodbDelete))
+			o.lineOne += "----Row Change-----+"
+			o.lineTwo += " sel  ins  upd  del|"
+			o.lineEnd += "-------------------+"
+			o.lineData += fmt.Sprintf("%4v %4v %4v %4v|", numHumen(innodbReads), numHumen(innodbInsert), numHumen(innodbUpdate), numHumen(innodbDelete))
 			o.lineCSV = append(o.lineCSV, innodbReads, innodbInsert, innodbUpdate, innodbDelete)
 
 		}
 
 		if !ibBufferHit {
-			o.lineOne += "--Innodb BP Request--+"
-			o.lineTwo += "logic physic wait hit|"
-			o.lineEnd += "---------------------+"
-			o.lineData += fmt.Sprintf("%5s %5s %5v %3v|", numHumen(innodbBpReadRequest), numHumen(innodbBpRead), innodbBpWaitFree, ife(hit > 99, aurora.Green(hit), aurora.Red(hit)))
+			o.lineOne += "--Buffer Request--+"
+			o.lineTwo += "logic phy wait hit|"
+			o.lineEnd += "------------------+"
+			o.lineData += fmt.Sprintf("%5v %4v %3v %3v|", numHumen(innodbBpReadRequest), numHumen(innodbBpRead), numHumen(innodbBpWaitFree), ife(hit > 99, aurora.Green(hit), aurora.Red(hit)))
 			o.lineCSV = append(o.lineCSV, innodbBpReadRequest, innodbBpRead, innodbBpWaitFree, hit)
 
 		}
 
 		if !redoCol {
-			o.lineOne += "--Redo Log--+"
-			o.lineTwo += "fsync writen|"
-			o.lineEnd += "------------+"
-			o.lineData += fmt.Sprintf("%4v %7v|", innodbOSLogFsync, innodbOSLogWrite)
+			o.lineOne += "-Redo Log--+"
+			o.lineTwo += "fsyn writen|"
+			o.lineEnd += "-----------+"
+			o.lineData += fmt.Sprintf("%5v %5v|", numHumen(innodbOSLogFsync), numHumen(innodbOSLogWrite))
 			o.lineCSV = append(o.lineCSV, innodbOSLogFsync, innodbOSLogWrite)
 
 		}
 
-		if rowLockCol {
-			o.lineOne += "--Inno Row Lock--+"
-			o.lineTwo += " waits  time  t/w|"
-			o.lineEnd += "-----------------+"
-			o.lineData += fmt.Sprintf("%5v %5v %4v|", innodbRowLockWait, innodbRowLockTime, innodbRowLockAvgWait)
+		if !rowLockCol {
+			o.lineOne += "---RowLock---+"
+			o.lineTwo += "wait time t/w|"
+			o.lineEnd += "-------------+"
+			o.lineData += fmt.Sprintf("%4v %4v %3v|", innodbRowLockWait, innodbRowLockTime, innodbRowLockAvgWait)
 			o.lineCSV = append(o.lineCSV, innodbRowLockWait, innodbRowLockTime, innodbRowLockAvgWait)
 
 		}
@@ -376,7 +376,7 @@ func monitor() {
 			o.lineOne += "---RedoLog IO---+"
 			o.lineTwo += "wait  logic  phy|"
 			o.lineEnd += "----------------+"
-			o.lineData += fmt.Sprintf("%4v %5v %5v|", ife(innodbLogWait > 1, aurora.Red(innodbLogWait), aurora.Green(innodbLogWait)), innodbLogWriteRequest, innodbLogWrite)
+			o.lineData += fmt.Sprintf("%4v %5v %5v|", ife(innodbLogWait > 1, aurora.Red(innodbLogWait), aurora.Green(innodbLogWait)), numHumen(innodbLogWriteRequest), numHumen(innodbLogWrite))
 			o.lineCSV = append(o.lineCSV, innodbLogWait, innodbLogWriteRequest, innodbLogWrite)
 
 		}
@@ -403,12 +403,12 @@ func monitor() {
 		}
 
 		if !netCol {
-			o.lineOne += "----Net----+"
-			o.lineTwo += " send  recv|"
-			o.lineEnd += "-----------+"
-			o.lineData += fmt.Sprintf("%5s", byteHumen(send))
+			o.lineOne += "-----Net-----+"
+			o.lineTwo += "  send   recv|"
+			o.lineEnd += "-------------+"
+			o.lineData += fmt.Sprintf("%6s", byteHumen(send))
 			o.lineData += fmt.Sprintf(" ")
-			o.lineData += fmt.Sprintf("%5s", byteHumen(received))
+			o.lineData += fmt.Sprintf("%6s", byteHumen(received))
 			o.lineData += fmt.Sprintf("|")
 
 			o.lineCSV = append(o.lineCSV, send, received)
