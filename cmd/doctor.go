@@ -37,7 +37,7 @@ import (
 // doctorCmd represents the doctor command
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
-	Short: "mysql error log anaylze ",
+	Short: "mysql error log anaylze & watch",
 	Long:  `Anaylze & watch mysql error log about semaphore crash`,
 	Run: func(cmd *cobra.Command, args []string) {
 

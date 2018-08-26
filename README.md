@@ -4,14 +4,15 @@ go get github.com/kevinbin/mysqldba
 ```
 ## Usage
 ```
-Welcome to the MySQL DBA Toolbox. 
+Welcome to the MySQL DBA Toolbox.
 
-Version: 1.0
+Version: 2.0
 
 Usage:
   mysqldba [command]
 
 Available Commands:
+  doctor      mysql error log anaylze & watch
   help        Help about any command
   monitor     A MySQL monitor like iostat
   rbr2sbr     Convert a rbr binary log to sbr format
@@ -19,7 +20,7 @@ Available Commands:
   slowlog     Capture MySQL slow log
 
 Flags:
-  -h, --help              help for mysqlbox
+  -h, --help              help for mysqldba
   -H, --host string       mysql host ip (default "localhost")
   -p, --password string   mysql login password (default "root")
   -P, --port int          mysql server port (default 3306)
