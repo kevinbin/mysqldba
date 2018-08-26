@@ -30,7 +30,6 @@ import (
 	"sort"
 	"strings"
 	// "strconv"
-	// "strings"
 	"time"
 )
 
@@ -41,10 +40,22 @@ var doctorCmd = &cobra.Command{
 	Long:  `anaylze mysql error log about semaphore crash`,
 	Run: func(cmd *cobra.Command, args []string) {
 
-		anaylzeErrorLog(file)
+		print(anaylzeErrorLog(filename))
+
 	},
 }
-var file string
+
+var (
+	filename, waitKey, writerKey, mysqlVer string
+)
+
+// LockInfo f
+type LogInfo struct {
+	restartTime, semaphoreTime, writerState []string
+
+	restarts, semaphores                           int
+	waitPoint, writer, lastWriteLock, lastReadLock map[string][]string
+}
 
 func init() {
 	RootCmd.AddCommand(doctorCmd)
@@ -53,46 +64,36 @@ func init() {
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	doctorCmd.Flags().StringVarP(&file, "file", "f", "", "MySQL error log file")
+	doctorCmd.Flags().StringVarP(&filename, "file", "f", "", "MySQL error log file")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// doctorCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
-func anaylzeErrorLog(file string) {
+func anaylzeErrorLog(filename string) (lg LogInfo) {
 
-	var restartTime, SemaphoreTime, writerState []string
-	var version, waitKey, writerKey string
-
-	restarts := int(0)
-	Semaphores := int(0)
-	waitPoint := map[string][]string{}
-	writer := map[string][]string{}
-	lastWriteLock := map[string][]string{}
-	lastReadLock := map[string][]string{}
-	// f, err := ioutil.ReadFile(file)
-	f, err := os.Open(file)
+	f, err := os.Open(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
-	// defer f.Close()
-	scanner := bufio.NewScanner(f)
 
+	scanner := bufio.NewScanner(f)
+	lg = LogInfo{}
 	for scanner.Scan() {
 		if strings.Contains(scanner.Text(), "Version:") {
-			version = strings.Fields(scanner.Text())[1]
+			mysqlVer = strings.Fields(scanner.Text())[1]
 		}
 		if strings.Contains(scanner.Text(), "ready for connections") {
-			restarts++
+			lg.restarts++
 			t := formatTime(strings.Fields(scanner.Text())[0])
-			restartTime = append(restartTime, t)
+			lg.restartTime = append(lg.restartTime, t)
 		}
 
 		if strings.Contains(scanner.Text(), "Semaphore wait has lasted > 600 seconds") {
-			Semaphores++
+			lg.semaphores++
 			t := formatTime(strings.Fields(scanner.Text())[0])
-			SemaphoreTime = append(SemaphoreTime, t)
+			lg.semaphoreTime = append(lg.semaphoreTime, t)
 		}
 
 		// --Thread 140202719565568 has waited at ha_innodb.cc line 14791 for 244.00 seconds the semaphore:
@@ -102,14 +103,14 @@ func anaylzeErrorLog(file string) {
 			// str[5]: ha_innodb.cc  str[7]: 14791 str[1]: 140202719565568
 			// if s, _ := strconv.ParseFloat(str[9], 32); s > 900 {
 			waitKey = fmt.Sprintf("%s:%s", str[5], str[7])
-			waitPoint[waitKey] = append(waitPoint[waitKey], str[1])
+			lg.waitPoint[waitKey] = append(lg.waitPoint[waitKey], str[1])
 		}
 		// }
 
 		//a writer (thread id 140617682765568) has reserved it in mode  exclusive
 		if strings.Contains(scanner.Text(), "has reserved it in mode") {
 			writerKey = strings.Trim(strings.Fields(scanner.Text())[4], ")")
-			writer[writerKey] = append(writer[writerKey], waitKey)
+			lg.writer[writerKey] = append(lg.writer[writerKey], waitKey)
 		}
 		// for k := range writer {
 
@@ -118,7 +119,7 @@ func anaylzeErrorLog(file string) {
 		// }
 		if strings.Contains(scanner.Text(), fmt.Sprintf("OS thread handle %s", writerKey)) {
 
-			writerState = append(writerState, scanner.Text())
+			lg.writerState = append(lg.writerState, scanner.Text())
 
 		}
 
@@ -127,50 +128,52 @@ func anaylzeErrorLog(file string) {
 		//Last time read locked in file row0purge.cc line 861
 		if strings.Contains(scanner.Text(), "Last time read locked") {
 			str := strings.Fields(scanner.Text())
-			lastReadLock[writerKey] = append(lastReadLock[writerKey], fmt.Sprintf("%s:%s", str[6], str[8]))
+			lg.lastReadLock[writerKey] = append(lg.lastReadLock[writerKey], fmt.Sprintf("%s:%s", str[6], str[8]))
 		}
 
 		//Last time write locked in file /usr/local/mysql-install/storage/innobase/dict/dict0stats.cc line 2366
 		if strings.Contains(scanner.Text(), "Last time write locked") {
 			str := strings.Split(scanner.Text(), "/")
-			lastWriteLock[writerKey] = append(lastWriteLock[writerKey], strings.Replace(str[len(str)-1], " line ", ":", 1))
+			lg.lastWriteLock[writerKey] = append(lg.lastWriteLock[writerKey], strings.Replace(str[len(str)-1], " line ", ":", 1))
 		}
 
 	}
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 	}
+	return lg
+}
 
-	fmt.Printf("MySQL Server Version: %s\n", version)
+func print(lg LogInfo) {
+	fmt.Printf("MySQL Server Version: %s\n", mysqlVer)
 	fmt.Print("\n********** MySQL service start count **********\n")
-	fmt.Printf("MySQL Semaphore crash -> %v times %q\n", Semaphores, SemaphoreTime)
-	fmt.Printf("  MySQL Service start -> %v times %q\n", restarts, restartTime)
+	fmt.Printf("MySQL Semaphore crash -> %v times %q\n", lg.semaphores, lg.semaphoreTime)
+	fmt.Printf("  MySQL Service start -> %v times %q\n", lg.restarts, lg.restartTime)
 
 	fmt.Print("\n********** Which thread waited lock **********")
-	for k, v := range waitPoint {
+	for k, v := range lg.waitPoint {
 		fmt.Printf("\n%20s -> %3v  %v\n", k, len(v), unique(v))
 	}
 
 	fmt.Print("\n********** Which writer threads block at **********")
-	for k, v := range writer {
+	for k, v := range lg.writer {
 		fmt.Printf("\n%20s -> %3v  %v\n", k, len(v), unique(v))
 	}
 
 	fmt.Print("\n********** These writer threads trx state **********\n")
-	for _, v := range writerState {
+	for _, v := range lg.writerState {
 		fmt.Println(v)
 	}
 
 	fmt.Print("\n********** These writer threads at last time reads locked **********")
-	for k, v := range lastReadLock {
+	for k, v := range lg.lastReadLock {
 		fmt.Printf("\n%20s -> %3v  %v\n", k, len(v), unique(v))
 	}
 
 	fmt.Print("\n********** These writer threads at last time write locked **********")
-	for k, v := range lastWriteLock {
+	for k, v := range lg.lastWriteLock {
 		fmt.Printf("\n%20s -> %3v  %v\n", k, len(v), unique(v))
 	}
-
 }
 
 func sortMapByValue(m map[string]uint64) string {
