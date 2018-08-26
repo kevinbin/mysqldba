@@ -71,27 +71,27 @@ func init() {
 func getLogConfig(db *sql.DB) map[string]string {
 	var r = make(map[string]string)
 	rows, err := db.Query(globalVariableSQL)
-	ifErrWithLog(err)
+	ifErrWithLog(err, "")
 	defer rows.Close()
 
 	for rows.Next() {
 		var n, v string
 		err := rows.Scan(&n, &v)
-		ifErrWithLog(err)
+		ifErrWithLog(err, "")
 		r[n] = v
 	}
 	err = rows.Err()
-	ifErrWithLog(err)
+	ifErrWithLog(err, "")
 	return r
 }
 
 func restoreOption(db *sql.DB, r map[string]string) {
 
 	sql, err := strconv.ParseFloat(r["long_query_time"], 32)
-	ifErrWithLog(err)
+	ifErrWithLog(err, "")
 
 	_, err = db.Exec("SET GLOBAL LONG_QUERY_TIME=?", sql)
-	ifErrWithLog(err)
+	ifErrWithLog(err, "")
 
 	db.Exec("SET GLOBAL SLOW_QUERY_LOG=?", r["slow_query_log"])
 	db.Exec("SET GLOBAL LOG_OUTPUT=?", r["log_output"])
@@ -112,7 +112,7 @@ func getSlowLog(db *sql.DB, r map[string]string) {
 	fmt.Printf("Original configuration \n slow_query_log: %v\n long_query_time: %v\n log_output: %v\n", r["slow_query_log"], r["long_query_time"], r["log_output"])
 
 	_, err := db.Exec("SET GLOBAL SLOW_QUERY_LOG=ON")
-	ifErrWithLog(err)
+	ifErrWithLog(err, "")
 	db.Exec("SET GLOBAL LOG_OUTPUT=FILE")
 	db.Exec("FLUSH SLOW LOGS")
 	db.Exec("SET GLOBAL LONG_QUERY_TIME=?", queryTime)
@@ -132,7 +132,7 @@ func getSlowLog(db *sql.DB, r map[string]string) {
 
 	tarFile := fmt.Sprintf("%s/%s_%vs_%s.tar.gz", dirPath, filepath.Base(r["slow_query_log_file"]), queryTime, time.Now().Format("20060102150405"))
 	err = tarIt(slowLogFile, tarFile)
-	ifErrWithLog(err)
+	ifErrWithLog(err, "")
 	fmt.Printf("\nConfiguration restored. Archived to %v\n", tarFile)
 
 }

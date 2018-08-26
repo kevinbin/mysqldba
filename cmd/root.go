@@ -42,7 +42,7 @@ const (
 
 	innodbStatusSQL   = "SHOW ENGINE INNODB STATUS"
 	scroll            = 40
-	version           = "1.0"
+	version           = "2.0"
 	globalVariableSQL = "show global variables"
 	slaveStatusSQL    = "show slave status"
 )
@@ -52,9 +52,6 @@ var RootCmd = &cobra.Command{
 	Use:   "mysqldba",
 	Short: "Welcome to the MySQL DBA Toolbox.",
 	Long:  "Welcome to the MySQL DBA Toolbox. \n\nVersion: " + version,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	//	Run: func(cmd *cobra.Command, args []string) { },
 }
 
 var (
@@ -121,30 +118,30 @@ func ifErrWithPanic(err error) {
 	}
 }
 
-func ifErrWithLog(err error) {
+func ifErrWithLog(err error, extInfo string) {
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err, extInfo)
 	}
 }
 
 func mysqlConnect(dsn string) *sql.DB {
 	db, err := sql.Open("mysql", dsn)
-	ifErrWithLog(err)
+	ifErrWithLog(err, "")
 	return db
 }
 
 func mysqlSimpleQuery(q string, db *sql.DB) string {
 	rows, err := db.Query(q)
-	ifErrWithLog(err)
+	ifErrWithLog(err, "")
 	defer rows.Close()
 	var r string
 
 	if rows.Next() {
 		err := rows.Scan(&r)
-		ifErrWithLog(err)
+		ifErrWithLog(err, "")
 	}
 	err = rows.Err()
-	ifErrWithLog(err)
+	ifErrWithLog(err, "")
 	return r
 }
 

@@ -119,14 +119,14 @@ func showEngineInnodb(db *sql.DB) {
 	if innodbState {
 		// show engine innodb status
 		rows, err := db.Query(innodbStatusSQL)
-		ifErrWithLog(err)
+		ifErrWithLog(err, "")
 		defer rows.Close()
 
 		var typeCol, nameCol, statusCol string
 
 		if rows.Next() {
 			err := rows.Scan(&typeCol, &nameCol, &statusCol)
-			ifErrWithLog(err)
+			ifErrWithLog(err, "")
 		}
 		// save innodb status resulte
 		fileName := "innodbstatus" // this file save show engine innodb status output
@@ -140,18 +140,18 @@ func showEngineInnodb(db *sql.DB) {
 
 func showGlobalStatus(db *sql.DB) {
 	rows, err := db.Query(globalStatusSQL)
-	ifErrWithLog(err)
+	ifErrWithLog(err, "")
 	defer rows.Close()
 
 	for rows.Next() {
 		var n string
 		var v int64
 		err := rows.Scan(&n, &v)
-		ifErrWithLog(err)
+		ifErrWithLog(err, "")
 		myStat[n] = v
 	}
 	err = rows.Err()
-	ifErrWithLog(err)
+	ifErrWithLog(err, "")
 
 	tps = (myStat["Com_commit"] + myStat["Com_rollback"] - myStat2["Com_commit"] - myStat2["Com_rollback"]) / interval
 	qps = (myStat["Queries"] - myStat2["Queries"]) / interval
@@ -207,7 +207,7 @@ func showGlobalStatus(db *sql.DB) {
 
 func showSlaveStatus(db *sql.DB) {
 	rows, err := db.Query(slaveStatusSQL)
-	ifErrWithLog(err)
+	ifErrWithLog(err, "")
 	defer rows.Close()
 	if rows.Next() {
 
@@ -233,7 +233,7 @@ func showSlaveStatus(db *sql.DB) {
 		}
 	}
 	err = rows.Err()
-	ifErrWithLog(err)
+	ifErrWithLog(err, "")
 }
 
 func strToInt(s string) int {
