@@ -1,4 +1,4 @@
-// Copyright © 2017 Hong Bin <hongbin@actionsky.com>
+// Copyright © 2017 Hong Bin <hongbin119@gmail.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -41,8 +41,11 @@ const (
 		   'Innodb_log_waits','Innodb_log_write_requests','Innodb_log_writes','Bytes_sent','Bytes_received')`
 
 	innodbStatusSQL   = "SHOW ENGINE INNODB STATUS"
+	// online: all node is ok, error: some node is not online
+	mgrMemberStateSQL = "SELECT IF(COUNT(*) > 0, 'ERROR','ONLINE') as MGR FROM performance_schema.replication_group_members WHERE MEMBER_STATE != 'ONLINE'"
+	mgrFlowQueueSQL   = "select right(member_id,5) as member, COUNT_TRANSACTIONS_REMOTE_IN_APPLIER_QUEUE as app, COUNT_TRANSACTIONS_IN_QUEUE as cert from performance_schema.replication_group_member_stats"
 	scroll            = 40
-	version           = "2.0"
+	version           = "3.0"
 	globalVariableSQL = "show global variables"
 	slaveStatusSQL    = "show slave status"
 )
@@ -51,7 +54,7 @@ const (
 var RootCmd = &cobra.Command{
 	Use:   "mysqldba",
 	Short: "Welcome to the MySQL DBA Toolbox.",
-	Long:  "Welcome to the MySQL DBA Toolbox. \n\nVersion: " + version,
+	Long:  "Welcome to the MySQL DBA Toolbox. \nAuthor: HongBin <hongbin119@gmail.com> \nVersion: " + version,
 }
 
 var (

@@ -6,7 +6,7 @@ go get github.com/kevinbin/mysqldba
 ```
 Welcome to the MySQL DBA Toolbox.
 
-Version: 2.0
+Version: 3.0
 
 Usage:
   mysqldba [command]

@@ -1,4 +1,4 @@
-// Copyright © 2017 Hong Bin <hongbin@actionsky.com>
+// Copyright © 2017 Hong Bin <hongbin119@gmail.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -70,8 +70,16 @@ var (
 	gtidN                                                      int
 	innodbState, netCol, thdCol, ibBufferCol, ibRowCol         bool
 	redoCol, qpsCol, ibBufferHit, comCol, redoIoCol, saveCsv   bool
-	slaveCol, gtidCol, cpuLoad, rowLockCol                     bool
+	slaveCol, gtidCol, cpuLoad, rowLockCol, mgrEnable          bool
+	mgrMembersState                                            string
+	
 )
+type flowQueue struct {
+	applierQueue int64
+	certQueue int64
+}
+
+var mgrFlowStat = make(map[string]*flowQueue)
 
 type oput struct {
 	lineCSV []int64
@@ -101,6 +109,8 @@ func init() {
 	monCmd.Flags().BoolVar(&cpuLoad, "skip_load", false, "skip output system load")
 	monCmd.Flags().BoolVar(&saveCsv, "csv", false, "save output to csv file ")
 	monCmd.Flags().BoolVar(&rowLockCol, "skip_row_lock", false, "output innodb row lock load")
+	monCmd.Flags().BoolVar(&mgrEnable, "mgr", false, "output about group replication status")
+
 
 }
 
@@ -113,6 +123,41 @@ func ife(condition bool, trueVal, falseVal interface{}) interface{} {
 func abs(i int64) int64 {
 
 	return int64(math.Abs(float64(i)))
+}
+func showMgrState(db *sql.DB)  {
+	if mgrEnable {
+		rows, err := db.Query(mgrMemberStateSQL)
+		ifErrWithLog(err, "")
+		defer rows.Close()
+
+		if rows.Next() {
+			err := rows.Scan(&mgrMembersState)
+			ifErrWithLog(err, "")
+		}
+		err = rows.Err()
+		ifErrWithLog(err, "")
+	}
+	
+}
+func showMgrFlowQueue(db *sql.DB)  {
+	if mgrEnable {
+		rows, err := db.Query(mgrFlowQueueSQL)
+		ifErrWithLog(err, "")
+		defer rows.Close()
+
+		for rows.Next() {
+			var memberID string
+			var a int64
+			var c int64
+			err := rows.Scan(&memberID, &a, &c)
+			ifErrWithLog(err, "")
+			mgrFlowStat[memberID] = &flowQueue{a,c}
+
+		}
+		err = rows.Err()
+		ifErrWithLog(err, "")
+	}
+	
 }
 func showEngineInnodb(db *sql.DB) {
 
@@ -282,6 +327,9 @@ func monitor() {
 
 		showEngineInnodb(db)
 		showGlobalStatus(db)
+		
+		showMgrState(db)
+		showMgrFlowQueue(db)
 
 		// skip first line
 		if count < 1 {
@@ -412,6 +460,22 @@ func monitor() {
 			o.lineData += fmt.Sprintf("|")
 
 			o.lineCSV = append(o.lineCSV, send, received)
+
+		}
+
+		if mgrEnable {
+			o.lineOne += "--MGR---------------FlowQueue----------------+"
+			o.lineTwo += " state |      applier     |       cert       |"
+			o.lineEnd += "-------+-------------------------------------+"
+			o.lineData += fmt.Sprintf(" %s |", ife(mgrMembersState == "ONLINE", aurora.Green(mgrMembersState), aurora.Red(mgrMembersState)))
+			for k := range mgrFlowStat {
+				o.lineData += fmt.Sprintf("%6v", numHumen(mgrFlowStat[k].applierQueue))
+			}
+			o.lineData += fmt.Sprintf("|")
+			for k := range mgrFlowStat {
+				o.lineData += fmt.Sprintf("%6v", numHumen(mgrFlowStat[k].certQueue))
+			}
+			o.lineData += fmt.Sprintf("|")
 
 		}
 
