@@ -5,7 +5,7 @@ go get github.com/kevinbin/mysqldba
 ## Usage
 ```
 Welcome to the MySQL DBA Toolbox.
-
+Author: HongBin <hongbin119@gmail.com>
 Version: 3.0
 
 Usage:
@@ -29,6 +29,9 @@ Flags:
 Use "mysqldba [command] --help" for more information about a command.
 ```
 
+## Disclaimer
+> This tool is a personal project and has not been rigorously and extensively tested. 
+> The author shall not be held responsible for any loss caused in the process of use, and the user shall bear the responsibility.
 
-
-
+## Note
+> Some of the features of this tool are inspired by orzdba, thanks to the orzdba author.
