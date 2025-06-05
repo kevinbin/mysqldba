@@ -24,10 +24,6 @@ import (
 	"database/sql"
 
 	"fmt"
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/logrusorgru/aurora"
-	"github.com/shirou/gopsutil/load"
-	"github.com/spf13/cobra"
 	"math"
 	"os"
 	"os/signal"
@@ -36,6 +32,11 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/logrusorgru/aurora"
+	"github.com/shirou/gopsutil/load"
+	"github.com/spf13/cobra"
 )
 
 // monCmd represents the mon command
@@ -72,11 +73,11 @@ var (
 	redoCol, qpsCol, ibBufferHit, comCol, redoIoCol, saveCsv   bool
 	slaveCol, gtidCol, cpuLoad, rowLockCol, mgrEnable          bool
 	mgrMembersState                                            string
-	
 )
+
 type flowQueue struct {
 	applierQueue int64
-	certQueue int64
+	certQueue    int64
 }
 
 var mgrFlowStat = make(map[string]*flowQueue)
@@ -111,7 +112,6 @@ func init() {
 	monCmd.Flags().BoolVar(&rowLockCol, "skip_row_lock", false, "output innodb row lock load")
 	monCmd.Flags().BoolVar(&mgrEnable, "mgr", false, "output about group replication status")
 
-
 }
 
 func ife(condition bool, trueVal, falseVal interface{}) interface{} {
@@ -124,7 +124,7 @@ func abs(i int64) int64 {
 
 	return int64(math.Abs(float64(i)))
 }
-func showMgrState(db *sql.DB)  {
+func showMgrState(db *sql.DB) {
 	if mgrEnable {
 		rows, err := db.Query(mgrMemberStateSQL)
 		ifErrWithLog(err, "")
@@ -137,9 +137,9 @@ func showMgrState(db *sql.DB)  {
 		err = rows.Err()
 		ifErrWithLog(err, "")
 	}
-	
+
 }
-func showMgrFlowQueue(db *sql.DB)  {
+func showMgrFlowQueue(db *sql.DB) {
 	if mgrEnable {
 		rows, err := db.Query(mgrFlowQueueSQL)
 		ifErrWithLog(err, "")
@@ -151,13 +151,13 @@ func showMgrFlowQueue(db *sql.DB)  {
 			var c int64
 			err := rows.Scan(&memberID, &a, &c)
 			ifErrWithLog(err, "")
-			mgrFlowStat[memberID] = &flowQueue{a,c}
+			mgrFlowStat[memberID] = &flowQueue{a, c}
 
 		}
 		err = rows.Err()
 		ifErrWithLog(err, "")
 	}
-	
+
 }
 func showEngineInnodb(db *sql.DB) {
 
@@ -327,7 +327,7 @@ func monitor() {
 
 		showEngineInnodb(db)
 		showGlobalStatus(db)
-		
+
 		showMgrState(db)
 		showMgrFlowQueue(db)
 

@@ -22,16 +22,17 @@ package cmd
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/hpcloud/tail"
-	"github.com/spf13/cobra"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/hpcloud/tail"
+	"github.com/spf13/cobra"
 )
 
 // doctorCmd represents the doctor command
@@ -54,11 +55,71 @@ var (
 	watch    bool
 )
 
+// 颜色常量
+const (
+	ColorReset  = "\033[0m"
+	ColorRed    = "\033[31m"
+	ColorGreen  = "\033[32m"
+	ColorYellow = "\033[33m"
+	ColorBlue   = "\033[34m"
+)
+
 type logInfo struct {
 	restartTime, semaphoreTime, writerState        []string
 	mysqlVer                                       string
 	restarts, semaphores                           int
 	waitPoint, writer, lastWriteLock, lastReadLock map[string][]string
+	waiterToWriter                                 map[string]string
+	latchReaders                                   map[string][]string // latch地址 -> []reader threadId
+	threadWaitLatch                                map[string]string   // threadId -> latch地址
+	latchType                                      map[string]string   // latchAddr -> S-lock/X-lock/SX-lock
+	latchCreated                                   map[string]string   // latchAddr -> 创建位置
+	writerMode                                     map[string]string   // writerId -> reserved mode
+	threadWaitInfo                                 map[string]string   // threadId -> 等待信息（文件:行号）
+	threadWaitSeconds                              map[string]string   // threadId -> 等待时长
+	threadLockType                                 map[string]string   // threadId -> 该线程请求的锁类型
+}
+
+// 新增：logInfo初始化函数
+func newLogInfo() logInfo {
+	return logInfo{
+		waitPoint:         make(map[string][]string),
+		writer:            make(map[string][]string),
+		lastWriteLock:     make(map[string][]string),
+		lastReadLock:      make(map[string][]string),
+		waiterToWriter:    make(map[string]string),
+		latchReaders:      make(map[string][]string),
+		threadWaitLatch:   make(map[string]string),
+		latchType:         make(map[string]string),
+		latchCreated:      make(map[string]string),
+		writerMode:        make(map[string]string),
+		threadWaitInfo:    make(map[string]string),
+		threadWaitSeconds: make(map[string]string),
+		threadLockType:    make(map[string]string),
+	}
+}
+
+// 新增：预编译的正则表达式
+var (
+	versionRegex    = regexp.MustCompile(`Version:\s*'([^']+)'`)
+	threadWaitRegex = regexp.MustCompile(`--Thread ([0-9]+) has waited at ([^ ]+) line ([0-9]+) for ([0-9]+) seconds`)
+	lockRegex       = regexp.MustCompile(`((?:S|X|SX)-lock)(?: \(([^)]+)\))? on RW-latch at ([^ ]+) created in file ([^ ]+) line ([0-9]+)`)
+	readerRegex     = regexp.MustCompile(`thread id ([0-9]+)\)`)
+	writerRegex     = regexp.MustCompile(`a writer \(thread id ([0-9]+)\) has reserved it in mode ([a-zA-Z ]+)`)
+)
+
+// 新增：通用字符串处理函数
+func parseTimeFromLine(line string) string {
+	fields := strings.Fields(line)
+	if len(fields) > 0 {
+		return formatTime(fields[0])
+	}
+	return ""
+}
+
+// 新增：构建DSN字符串，消除重复代码
+func buildDSN() string {
+	return fmt.Sprintf("%s:%s@(%s:%d)/", dbUser, dbPassWd, dbHost, dbPort)
 }
 
 func init() {
@@ -70,9 +131,10 @@ func init() {
 	//Observed before the crash
 	doctorCmd.Flags().BoolVarP(&watch, "watch", "w", false, "watch MySQL error log. Collect thread info if discovery semaphore wait ")
 }
+
 func watchErroLog() {
 
-	dsn := fmt.Sprintf("%s:%s@(%s:%d)/", dbUser, dbPassWd, dbHost, dbPort)
+	dsn := buildDSN()
 
 	db := mysqlConnect(dsn)
 	var logfile, datadir string
@@ -101,13 +163,13 @@ func watchErroLog() {
 
 			rows, err := db.Query(query)
 			ifErrWithLog(err, "")
-			defer rows.Close()
 
 			for rows.Next() {
 				var clientUser, clientHost, digestText string
 				var osid, procid int
 
 				err := rows.Scan(&osid, &procid, &clientUser, &clientHost, &digestText)
+				ifErrWithPanic(err)
 
 				result := fmt.Sprintf("%v THREAD_OS_ID:%v PROCESSLIST_ID:%v PROCESSLIST_USER:%v PROCESSLIST_HOST:%v DIGEST_TEXT:%v \n", line.Time.Format(time.RFC3339), osid, procid, clientUser, clientHost, digestText)
 
@@ -117,72 +179,130 @@ func watchErroLog() {
 
 			err = rows.Err()
 			ifErrWithLog(err, "")
+			rows.Close()
 		}
 
 	}
 }
+
 func anaylzeErrorLog(filename string) (lg logInfo) {
 	var waitKey, writerKey string
-	lg = logInfo{}
-	lg.waitPoint = make(map[string][]string)
-	lg.writer = make(map[string][]string)
-	lg.lastWriteLock = make(map[string][]string)
-	lg.lastReadLock = make(map[string][]string)
+	lg = newLogInfo() // 使用新的初始化函数
 
 	f, err := os.Open(filename)
 	ifErrWithLog(err, " No error log file specified")
 
 	scanner := bufio.NewScanner(f)
 
+	var currentThreadId string
+	latchToThread := make(map[string]string)
+	var currentLatchAddr string // 新增：记录当前正在处理的Latch地址
+
 	for scanner.Scan() {
-		if strings.Contains(scanner.Text(), "Version:") {
-			lg.mysqlVer = strings.Fields(scanner.Text())[1]
+		line := scanner.Text()
+
+		// 使用预编译的正则表达式
+		if strings.Contains(line, "Version:") {
+			if match := versionRegex.FindStringSubmatch(line); len(match) > 1 {
+				lg.mysqlVer = match[1]
+			}
 		}
-		if strings.Contains(scanner.Text(), "ready for connections") {
+
+		if strings.Contains(line, "mysqld: ready for connections") {
 			lg.restarts++
-			t := formatTime(strings.Fields(scanner.Text())[0])
-			lg.restartTime = append(lg.restartTime, t)
+			lg.restartTime = append(lg.restartTime, parseTimeFromLine(line))
 		}
 
-		if strings.Contains(scanner.Text(), "Semaphore wait has lasted > 600 seconds") {
+		if strings.Contains(line, "Semaphore wait has lasted > 600 seconds") {
 			lg.semaphores++
-			t := formatTime(strings.Fields(scanner.Text())[0])
-			lg.semaphoreTime = append(lg.semaphoreTime, t)
+			lg.semaphoreTime = append(lg.semaphoreTime, parseTimeFromLine(line))
 		}
 
-		// --Thread 140202719565568 has waited at ha_innodb.cc line 14791 for 244.00 seconds the semaphore:
-		if strings.Contains(scanner.Text(), "has waited at") {
+		if strings.HasPrefix(line, "--Thread ") && strings.Contains(line, " has waited at ") {
+			fields := strings.Fields(line)
+			if len(fields) > 1 {
+				currentThreadId = fields[1]
+			}
+			if len(fields) > 7 {
+				waitKey = fmt.Sprintf("%s:%s", fields[5], fields[7])
+				lg.waitPoint[waitKey] = append(lg.waitPoint[waitKey], fields[1])
+			}
 
-			str := strings.Fields(scanner.Text())
-			// str[5]: ha_innodb.cc  str[7]: 14791 str[1]: 140202719565568
-			waitKey = fmt.Sprintf("%s:%s", str[5], str[7])
-			lg.waitPoint[waitKey] = append(lg.waitPoint[waitKey], str[1])
+			// 使用预编译的正则表达式
+			if match := threadWaitRegex.FindStringSubmatch(line); len(match) > 4 {
+				threadId := match[1]
+				file := match[2]
+				lineNum := match[3]
+				seconds := match[4]
+				lg.threadWaitInfo[threadId] = fmt.Sprintf("%s:%s", file, lineNum)
+				lg.threadWaitSeconds[threadId] = seconds
+			}
 		}
 
-		//a writer (thread id 140617682765568) has reserved it in mode  exclusive
-		if strings.Contains(scanner.Text(), "has reserved it in mode") {
-			writerKey = strings.Trim(strings.Fields(scanner.Text())[4], ")")
-			lg.writer[writerKey] = append(lg.writer[writerKey], waitKey)
+		// 块内遇到锁信息都归属于currentThreadId
+		if strings.Contains(line, "-lock") && strings.Contains(line, "on RW-latch at") && strings.Contains(line, "created in file") {
+			if match := lockRegex.FindStringSubmatch(line); len(match) > 4 && currentThreadId != "" {
+				lockType := match[1]
+				lockMode := match[2] // 如 wait_ex
+				latchAddr := match[3]
+				createdFile := match[4]
+				createdLine := match[5]
+
+				fullLockType := lockType
+				if lockMode != "" {
+					fullLockType = fmt.Sprintf("%s (%s)", lockType, lockMode)
+				}
+
+				createdPos := fmt.Sprintf("%s:%s", createdFile, createdLine)
+				lg.threadWaitLatch[currentThreadId] = latchAddr
+				latchToThread[latchAddr] = currentThreadId
+				lg.threadLockType[currentThreadId] = fullLockType // 以线程ID为key存储该线程请求的锁类型
+				lg.latchType[latchAddr] = lockType                // latch基础类型（不含模式）
+				lg.latchCreated[latchAddr] = createdPos
+				currentLatchAddr = latchAddr // 新增：记录当前Latch地址
+			}
 		}
 
-		if strings.Contains(scanner.Text(), fmt.Sprintf("OS thread handle %s", writerKey)) {
-
-			lg.writerState = append(lg.writerState, scanner.Text())
-
+		if strings.Contains(line, "number of readers") && strings.Contains(line, "thread id") {
+			all := readerRegex.FindAllStringSubmatch(line, -1)
+			// 只给当前正在处理的Latch加reader
+			if currentLatchAddr != "" {
+				for _, m := range all {
+					if len(m) > 1 {
+						lg.latchReaders[currentLatchAddr] = append(lg.latchReaders[currentLatchAddr], m[1])
+					}
+				}
+			}
 		}
 
-		//Last time read locked in file row0purge.cc line 861
-		if strings.Contains(scanner.Text(), "Last time read locked") {
-			str := strings.Fields(scanner.Text())
-			lg.lastReadLock[writerKey] = append(lg.lastReadLock[writerKey], fmt.Sprintf("%s:%s", str[6], str[8]))
+		if strings.Contains(line, "a writer (thread id ") && strings.Contains(line, ") has reserved it in mode") {
+			if match := writerRegex.FindStringSubmatch(line); len(match) > 2 && currentThreadId != "" {
+				writerId := match[1]
+				mode := strings.TrimSpace(match[2])
+				lg.waiterToWriter[currentThreadId] = writerId
+				writerKey = writerId
+				lg.writer[writerKey] = append(lg.writer[writerKey], waitKey)
+				lg.writerMode[writerId] = mode
+			}
 		}
 
-		//Last time write locked in file /usr/local/mysql-install/storage/innobase/dict/dict0stats.cc line 2366
-		if strings.Contains(scanner.Text(), "Last time write locked") {
-			str := strings.Split(scanner.Text(), "/")
-			lg.lastWriteLock[writerKey] = append(lg.lastWriteLock[writerKey], strings.Replace(str[len(str)-1], " line ", ":", 1))
+		if strings.Contains(line, fmt.Sprintf("OS thread handle %s", writerKey)) {
+			lg.writerState = append(lg.writerState, line)
 		}
 
+		if strings.Contains(line, "Last time read locked") {
+			str := strings.Fields(line)
+			if len(str) > 8 {
+				lg.lastReadLock[writerKey] = append(lg.lastReadLock[writerKey], fmt.Sprintf("%s:%s", str[6], str[8]))
+			}
+		}
+
+		if strings.Contains(line, "Last time write locked") {
+			str := strings.Split(line, "/")
+			if len(str) > 0 {
+				lg.lastWriteLock[writerKey] = append(lg.lastWriteLock[writerKey], strings.Replace(str[len(str)-1], " line ", ":", 1))
+			}
+		}
 	}
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -191,64 +311,211 @@ func anaylzeErrorLog(filename string) (lg logInfo) {
 }
 
 func logOutput(lg logInfo) {
-	fmt.Printf("MySQL Server Version: %s\n", lg.mysqlVer)
-	fmt.Print("\n********** MySQL service start count **********\n")
-	fmt.Printf("MySQL Semaphore crash -> %v times %q\n", lg.semaphores, lg.semaphoreTime)
-	fmt.Printf("  MySQL Service start -> %v times %q\n", lg.restarts, lg.restartTime)
+	fmt.Printf("MySQL Version: https://github.com/mysql/mysql-server/blob/mysql-%s\n", lg.mysqlVer)
+	fmt.Printf("MySQL Crash(s): %d次 %q\n", lg.semaphores, lg.semaphoreTime)
+	fmt.Printf("MySQL Start(s): %d次 %q\n", lg.restarts, lg.restartTime)
+	printLockDependency(lg)
+}
 
-	fmt.Print("\n********** Which thread waited lock **********")
-	for k, v := range lg.waitPoint {
-		fmt.Printf("\n%20s -> %3v  %v\n", k, len(v), unique(v))
+// 递归输出锁链式阻塞依赖链，最大深度5
+func printLockDependency(lg logInfo) {
+	maxDepth := 10
+	const maxShowWaiters = 5
+	// 新增：提取函数来收集和排序latch等待者
+	latchWaiters := collectLatchWaiters(lg)
+
+	// 排序 latchAddr
+	var latchAddrs []string
+	for latchAddr := range latchWaiters {
+		latchAddrs = append(latchAddrs, latchAddr)
 	}
+	sort.Strings(latchAddrs)
+	latchIdx := 1 // 新增：锁序号
+	for _, latchAddr := range latchAddrs {
+		waiters := uniqueSlice(latchWaiters[latchAddr])
+		showWaiters := waiters
+		if len(waiters) > maxShowWaiters {
+			showWaiters = append(waiters[:maxShowWaiters], "...")
+		}
+		ltype := lg.latchType[latchAddr]
+		lcreated := lg.latchCreated[latchAddr]
+		fmt.Printf("🔒%s[%d]%s Latch %s%s%s (%s%s%s, created %s): %s%d%s threads waiting: [",
+			ColorYellow, latchIdx, ColorReset,
+			ColorYellow, latchAddr, ColorReset,
+			ColorGreen, ltype, ColorReset, lcreated,
+			ColorYellow, len(waiters), ColorReset)
+		for i, tid := range showWaiters {
+			fmt.Printf("%s%s%s", ColorBlue, tid, ColorReset)
+			if i != len(showWaiters)-1 {
+				fmt.Print(" ")
+			}
+		}
+		fmt.Print("]\n")
 
-	fmt.Print("\n********** Which writer threads block at **********")
-	for k, v := range lg.writer {
-		fmt.Printf("\n%20s -> %3v  %v\n", k, len(v), unique(v))
-	}
-
-	fmt.Print("\n********** These writer threads trx state **********\n")
-	for _, v := range lg.writerState {
-		fmt.Println(v)
-	}
-
-	fmt.Print("\n********** These writer threads at last time reads locked **********")
-	for k, v := range lg.lastReadLock {
-		fmt.Printf("\n%20s -> %3v  %v\n", k, len(v), unique(v))
-	}
-
-	fmt.Print("\n********** These writer threads at last time write locked **********")
-	for k, v := range lg.lastWriteLock {
-		fmt.Printf("\n%20s -> %3v  %v\n", k, len(v), unique(v))
+		if len(waiters) > 0 {
+			visitedThreads := make(map[string]bool)
+			latchVisited := make(map[string]bool) // 每个latch独立的visited状态
+			printThreadChain(lg, waiters[0], 0, maxDepth, visitedThreads, latchVisited)
+		}
+		fmt.Print("\n")
+		latchIdx++ // 新增：递增序号
 	}
 }
 
-func sortMapByValue(m map[string]uint64) string {
-	type kv struct {
-		Key   string
-		Value uint64
-	}
-	b := new(bytes.Buffer)
-	var ss []kv
-	for k, v := range m {
-		ss = append(ss, kv{k, v})
+// 递归打印单个线程的依赖链，包括writer和reader依赖，latchAddr去重
+func printThreadChain(lg logInfo, threadId string, depth, maxDepth int, visitedThreads map[string]bool, latchVisited map[string]bool) {
+	if depth > maxDepth {
+		fmt.Printf("%s%s (max depth reached)\n", strings.Repeat("  ", depth), threadId)
+		return
 	}
 
-	sort.Slice(ss, func(i, j int) bool {
-		return ss[i].Value > ss[j].Value
-	})
-
-	for _, kv := range ss {
-		fmt.Fprintf(b, "%s:(%v) ", kv.Key, kv.Value)
+	visitedThreads[threadId] = true
+	indent := strings.Repeat("   ", depth)
+	writerId, hasWriter := lg.waiterToWriter[threadId]
+	latchAddr, hasLatch := lg.threadWaitLatch[threadId]
+	ltype := ""
+	if hasLatch {
+		ltype = lg.latchType[latchAddr]
 	}
-	return b.String()
+
+	if hasWriter {
+		mode := lg.writerMode[writerId]
+		waitInfo := lg.threadWaitInfo[writerId]
+		waitSeconds := lg.threadWaitSeconds[writerId]
+		if visitedThreads[writerId] {
+			fmt.Printf("%s  🔁 (cycle detected) writer thread [%s%s%s]\n", indent, ColorRed, writerId, ColorReset)
+			return
+		}
+
+		// 显示 writer 线程请求的锁信息
+		writerLatchAddr := lg.threadWaitLatch[writerId]
+		writerLatchType := lg.threadLockType[writerId] // 改为直接从线程ID获取该线程请求的锁类型
+		writerLatchCreated := lg.latchCreated[writerLatchAddr]
+
+		fmt.Printf("%s  ⛔ -> Blocked by writer thread [%s%s%s] (reserved mode: %s)\n", indent, ColorRed, writerId, ColorReset, mode)
+		if waitInfo != "" && waitSeconds != "" {
+			fmt.Printf("%s      -> Writer thread waited at %s for %s seconds\n", indent, waitInfo, waitSeconds)
+		}
+		if writerLatchAddr != "" && writerLatchType != "" {
+			fmt.Printf("%s      -> Requesting %s%s%s on RW-latch at %s%s%s (created %s)\n", indent, ColorGreen, writerLatchType, ColorReset, ColorYellow, writerLatchAddr, ColorReset, writerLatchCreated)
+		}
+
+		if locks, ok := lg.lastReadLock[writerId]; ok {
+			summary := summarizeLocks(locks)
+			fmt.Printf("%s      -> Last read locked at %s\n", indent, summary)
+		}
+
+		if locks, ok := lg.lastWriteLock[writerId]; ok {
+			summary := summarizeLocks(locks)
+			fmt.Printf("%s      -> Last write locked at %s\n", indent, summary)
+		}
+		printThreadChain(lg, writerId, depth+1, maxDepth, visitedThreads, latchVisited)
+		if hasLatch2, latchAddr2 := false, ""; writerId != "" {
+			latchAddr2, hasLatch2 = lg.threadWaitLatch[writerId]
+			if hasLatch2 && ltype == "S-lock" { // 只有S-lock waiter才递归reader
+				printReaderDependency(lg, latchAddr2, indent+"     ", depth+2, maxDepth, visitedThreads, latchVisited)
+			}
+		}
+	} else if hasLatch && ltype == "S-lock" {
+		printReaderDependency(lg, latchAddr, indent+"      ", depth+1, maxDepth, visitedThreads, latchVisited)
+	} else if hasLatch {
+		// 对于没有明确writer信息但有latch的情况，显示基础信息
+		if depth == 0 {
+			// 对于第一层线程，如果没有找到writer映射但有last lock信息，显示可用信息
+			fmt.Printf("%s  -> No writer mapping found for thread %s\n", indent, threadId)
+			// 尝试通过latch地址查找last lock信息
+			if locks, ok := lg.lastWriteLock[threadId]; ok && len(locks) > 0 {
+				summary := summarizeLocks(locks)
+				fmt.Printf("%s       -> Last write locked at %s\n", indent, summary)
+			}
+			if locks, ok := lg.lastReadLock[threadId]; ok && len(locks) > 0 {
+				summary := summarizeLocks(locks)
+				fmt.Printf("%s       -> Last read locked at %s\n", indent, summary)
+			}
+		}
+	}
 }
 
-func unique(intSlice []string) string {
-	counter := make(map[string]uint64)
-	for _, row := range intSlice {
-		counter[row]++
+// 新增：统计锁点出现次数并格式化输出
+func summarizeLocks(locks []string) string {
+	counter := make(map[string]int)
+	for _, l := range locks {
+		counter[l]++
 	}
-	return sortMapByValue(counter)
+	// 排序锁点
+	var keys []string
+	for k := range counter {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var result []string
+	for _, k := range keys {
+		v := counter[k]
+		if v > 1 {
+			result = append(result, fmt.Sprintf("%s (%d)", k, v))
+		} else {
+			result = append(result, k)
+		}
+	}
+	return "[" + strings.Join(result, ", ") + "]"
+}
+
+// 新增：收集和排序latch等待者
+func collectLatchWaiters(lg logInfo) map[string][]string {
+	latchWaiters := make(map[string][]string)
+
+	// 先收集所有waitPoint的keys并排序，确保遍历顺序一致
+	var waitKeys []string
+	for key := range lg.waitPoint {
+		waitKeys = append(waitKeys, key)
+	}
+	sort.Strings(waitKeys)
+
+	// 按排序后的顺序处理，确保结果一致
+	for _, key := range waitKeys {
+		threads := lg.waitPoint[key]
+		for _, threadId := range uniqueSlice(threads) {
+			if latchAddr, ok := lg.threadWaitLatch[threadId]; ok {
+				latchWaiters[latchAddr] = append(latchWaiters[latchAddr], threadId)
+			}
+		}
+	}
+
+	// 对每个latch的waiters进行排序
+	for latchAddr := range latchWaiters {
+		sort.Strings(latchWaiters[latchAddr])
+	}
+
+	return latchWaiters
+}
+
+// 新增：打印reader依赖关系的辅助函数
+func printReaderDependency(lg logInfo, latchAddr, indentPrefix string, depth, maxDepth int, visitedThreads map[string]bool, latchVisited map[string]bool) {
+	if !latchVisited[latchAddr] {
+		latchVisited[latchAddr] = true
+		readers := uniqueSlice(lg.latchReaders[latchAddr])
+		for _, readerId := range readers {
+			fmt.Printf("%s📖 -> Blocked by reader thread %s%s%s (holding S-lock on latch %s%s%s)\n", indentPrefix, ColorBlue, readerId, ColorReset, ColorYellow, latchAddr, ColorReset)
+			if visitedThreads[readerId] {
+				fmt.Printf("%s🔁 Thread %s (cycle detected)\n", indentPrefix+"  ", readerId)
+				continue
+			}
+			printThreadChain(lg, readerId, depth, maxDepth, visitedThreads, latchVisited)
+		}
+	}
+}
+
+// 新增：去重辅助
+func uniqueSlice(slice []string) []string {
+	m := make(map[string]struct{})
+	var result []string
+	for _, v := range slice {
+		if _, ok := m[v]; !ok {
+			m[v] = struct{}{}
+			result = append(result, v)
+		}
+	}
+	return result
 }
 
 func formatTime(s string) string {

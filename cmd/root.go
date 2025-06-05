@@ -25,12 +25,13 @@ import (
 	"compress/gzip"
 	"database/sql"
 	"fmt"
-	"github.com/logrusorgru/aurora"
-	"github.com/spf13/cobra"
 	"io"
 	"log"
 	"os"
 	"strconv"
+
+	"github.com/logrusorgru/aurora"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -40,7 +41,7 @@ const (
 	       'Innodb_rows_deleted','Innodb_buffer_pool_read_requests','Innodb_buffer_pool_reads','Innodb_os_log_fsyncs','Innodb_os_log_written',
 		   'Innodb_log_waits','Innodb_log_write_requests','Innodb_log_writes','Bytes_sent','Bytes_received')`
 
-	innodbStatusSQL   = "SHOW ENGINE INNODB STATUS"
+	innodbStatusSQL = "SHOW ENGINE INNODB STATUS"
 	// online: all node is ok, error: some node is not online
 	mgrMemberStateSQL = "SELECT IF(COUNT(*) > 0, 'ERROR','ONLINE') as MGR FROM performance_schema.replication_group_members WHERE MEMBER_STATE != 'ONLINE'"
 	mgrFlowQueueSQL   = "select right(member_id,5) as member, COUNT_TRANSACTIONS_REMOTE_IN_APPLIER_QUEUE as app, COUNT_TRANSACTIONS_IN_QUEUE as cert from performance_schema.replication_group_member_stats"
@@ -58,8 +59,8 @@ var RootCmd = &cobra.Command{
 }
 
 var (
-	dbUser, dbPassWd, dbHost, dbSocket, dsn string
-	dbPort                                  int
+	dbUser, dbPassWd, dbHost string
+	dbPort                   int
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -88,7 +89,7 @@ func byteHumen(i int64) aurora.Value {
 		return aurora.Green(strconv.FormatInt(i/1024, 10) + "KB")
 
 	case i >= 1048576 && i < 1073741824:
-		return aurora.Brown(strconv.FormatInt(i/1048576, 10) + "MB")
+		return aurora.Yellow(strconv.FormatInt(i/1048576, 10) + "MB")
 
 	case i >= 1073741824:
 		return aurora.Red(strconv.FormatInt(i/1073741824, 10) + "GB")
@@ -180,10 +181,10 @@ func tarIt(src string, des string) error {
 
 	// open files for taring
 	f, err := os.Open(src)
-	defer f.Close()
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
 	// copy file data into tar writer
 	if _, err := io.Copy(tw, f); err != nil {
