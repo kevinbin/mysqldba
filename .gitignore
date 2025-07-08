@@ -1,0 +1,8 @@
+
+# YoYo AI version control directory
+.yoyo/
+mysql-8.0.34-linux-glibc2.17-x86_64-minimal.tar.xz
+test_query.sql
+mydba
+mysql_checkup_report.html
+.vscode/settings.json

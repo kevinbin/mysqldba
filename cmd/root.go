@@ -53,7 +53,7 @@ const (
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
-	Use:   "mysqldba",
+	Use:   "mydba",
 	Short: "Welcome to the MySQL DBA Toolbox.",
 	Long:  "Welcome to the MySQL DBA Toolbox. \nAuthor: HongBin <hongbin119@gmail.com> \nVersion: " + version,
 }
@@ -122,30 +122,31 @@ func ifErrWithPanic(err error) {
 	}
 }
 
-func ifErrWithLog(err error, extInfo string) {
+func ifErrWithLog(err error, msg ...string) {
 	if err != nil {
-		log.Fatal(err, extInfo)
+		log.Fatal(err, msg)
 	}
 }
 
 func mysqlConnect(dsn string) *sql.DB {
 	db, err := sql.Open("mysql", dsn)
-	ifErrWithLog(err, "")
+	err = db.Ping()
+	ifErrWithLog(err)
 	return db
 }
 
 func mysqlSimpleQuery(q string, db *sql.DB) string {
 	rows, err := db.Query(q)
-	ifErrWithLog(err, "")
+	ifErrWithLog(err)
 	defer rows.Close()
 	var r string
 
 	if rows.Next() {
 		err := rows.Scan(&r)
-		ifErrWithLog(err, "")
+		ifErrWithLog(err)
 	}
 	err = rows.Err()
-	ifErrWithLog(err, "")
+	ifErrWithLog(err)
 	return r
 }
 

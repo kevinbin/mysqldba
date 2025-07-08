@@ -1,0 +1,57 @@
+# MySQL 8.0
+[client]
+port={{MYSQL_PORT}}
+socket={{DATA_DIR}}/mysql.sock
+
+
+[mysqld]
+# Basic Settings
+user=mysql
+port={{MYSQL_PORT}}
+basedir=/usr/local/mysql
+datadir={{DATA_DIR}}
+socket={{DATA_DIR}}/mysql.sock
+pid-file={{DATA_DIR}}/mysql.pid
+max_connections=1000
+tmp_table_size=1G
+max_heap_table_size=1G
+log_timestamps=SYSTEM
+
+# Character Set
+character-set-server=utf8mb4
+collation-server=utf8mb4_unicode_ci
+
+# Storage Engine
+disabled_storage_engines="MyISAM,BLACKHOLE,FEDERATED,ARCHIVE"
+
+# Replication Settings
+server-id={{SERVER_ID}}
+gtid_mode=ON
+enforce_gtid_consistency=ON
+log-bin=mysql-bin
+sync_binlog=1
+binlog_rows_query_log_events=1
+binlog_expire_logs_seconds=1209600   # 14 days
+
+# InnoDB Settings
+innodb_dedicated_server=on
+
+# Logging
+log-error={{DATA_DIR}}/error.log
+slow_query_log=ON
+slow_query_log_file={{DATA_DIR}}/slow.log
+long_query_time=2
+general_log_file={{DATA_DIR}}/general.log
+
+# Connection Settings
+max_connections=200
+max_connect_errors=1000
+
+# Security Settings
+skip-name-resolve
+explicit_defaults_for_timestamp=ON
+
+# SSL Settings
+ssl-ca={{DATA_DIR}}/ca.pem
+ssl-cert={{DATA_DIR}}/server-cert.pem
+ssl-key={{DATA_DIR}}/server-key.pem
