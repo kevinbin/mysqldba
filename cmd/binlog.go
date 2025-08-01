@@ -35,14 +35,16 @@ import (
 
 // BinlogStats 统计结构体
 type BinlogStats struct {
-	TotalCount  int
-	InsertCount int
-	UpdateCount int
-	DeleteCount int
-	QueryType   string
-	QueryCount  int
-	TableName   string
-	Timestamp   string
+	TotalCount      int
+	InsertCount     int
+	UpdateCount     int
+	DeleteCount     int
+	QueryType       string
+	QueryCount      int
+	TableName       string
+	Timestamp       string
+	TransactionSize int   // 事务大小（字节）
+	StartPosition   int64 // 事务开始位置
 }
 
 // binlogCmd represents the binlog command
@@ -103,6 +105,8 @@ func analyzeBinlogDetailed(binlogFile string) {
 	deleteRegex := regexp.MustCompile(`### DELETE FROM .*`)
 	atRegex := regexp.MustCompile(`^# at `)
 	commitRegex := regexp.MustCompile(`^COMMIT`)
+	beginRegex := regexp.MustCompile(`^BEGIN`)
+	atPositionRegex := regexp.MustCompile(`^# at (\d+)`)
 
 	// State variables
 	stats := &BinlogStats{}
@@ -112,7 +116,29 @@ func analyzeBinlogDetailed(binlogFile string) {
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		if tableMapRegex.MatchString(line) {
+		// Track transaction position for size calculation
+		if atPositionRegex.MatchString(line) {
+			matches := atPositionRegex.FindStringSubmatch(line)
+			if len(matches) >= 2 {
+				if position, err := strconv.ParseInt(matches[1], 10, 64); err == nil {
+					if stats.StartPosition == 0 {
+						stats.StartPosition = position
+					}
+				}
+			}
+		}
+
+		if beginRegex.MatchString(line) {
+			// Reset transaction statistics for new transaction
+			stats.TotalCount = 0
+			stats.InsertCount = 0
+			stats.UpdateCount = 0
+			stats.DeleteCount = 0
+			stats.QueryType = ""
+			stats.QueryCount = 0
+			stats.TransactionSize = 0
+			flag = false
+		} else if tableMapRegex.MatchString(line) {
 			// Parse table mapping line
 			parts := strings.Fields(line)
 			timestamp := ""
@@ -154,14 +180,29 @@ func analyzeBinlogDetailed(binlogFile string) {
 				aurora.Magenta(strconv.Itoa(stats.QueryCount)))
 			stats.QueryType = ""
 			stats.QueryCount = 0
+		} else if atPositionRegex.MatchString(line) && stats.StartPosition > 0 {
+			// Get current position and calculate transaction size
+			matches := atPositionRegex.FindStringSubmatch(line)
+			if len(matches) >= 2 {
+				if currentPosition, err := strconv.ParseInt(matches[1], 10, 64); err == nil {
+					// Store the current position for potential size calculation
+					stats.TransactionSize = int(currentPosition - stats.StartPosition)
+				}
+			}
 		} else if commitRegex.MatchString(line) {
-			// Output transaction summary
-			fmt.Printf("[Transaction Total: %s Insert(s): %s Update(s): %s Delete(s): %s]\n",
+			// Output transaction summary with size
+			var sizeInfo string
+			if stats.TransactionSize > 0 {
+				sizeInfo = fmt.Sprintf(" Size: %s bytes", aurora.Cyan(strconv.Itoa(stats.TransactionSize)))
+			}
+
+			fmt.Printf("[Transaction Total: %s -> Insert(s): %s Update(s): %s Delete(s): %s%s]\n",
 				aurora.Bold(aurora.Blue(strconv.Itoa(stats.TotalCount))),
 				aurora.Green(strconv.Itoa(stats.InsertCount)),
 				aurora.Yellow(strconv.Itoa(stats.UpdateCount)),
-				aurora.Red(strconv.Itoa(stats.DeleteCount)))
-			fmt.Println(strings.Repeat("=", 88))
+				aurora.Red(strconv.Itoa(stats.DeleteCount)),
+				sizeInfo)
+			fmt.Println(strings.Repeat("-", 88))
 
 			// Reset statistics
 			stats.TotalCount = 0
@@ -170,6 +211,8 @@ func analyzeBinlogDetailed(binlogFile string) {
 			stats.DeleteCount = 0
 			stats.QueryType = ""
 			stats.QueryCount = 0
+			stats.TransactionSize = 0
+			stats.StartPosition = 0
 			flag = false
 		}
 	}

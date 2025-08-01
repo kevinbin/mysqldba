@@ -53,7 +53,7 @@ const (
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
-	Use:   "mydba",
+	Use:   "mysqldba",
 	Short: "Welcome to the MySQL DBA Toolbox.",
 	Long:  "Welcome to the MySQL DBA Toolbox. \nAuthor: HongBin <hongbin119@gmail.com> \nVersion: " + version,
 }

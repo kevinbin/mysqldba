@@ -1100,7 +1100,7 @@ var showOSInfo bool
 
 var CheckupCmd = &cobra.Command{
 	Use:   "checkup",
-	Short: "MySQL健康巡检，输出HTML报告",
+	Short: "MySQL health checkup with HTML report output",
 	Run: func(cmd *cobra.Command, args []string) {
 		dsn := fmt.Sprintf("%s:%s@(%s:%d)/%s", dbUser, dbPassWd, dbHost, dbPort, database)
 
@@ -1130,6 +1130,6 @@ var CheckupCmd = &cobra.Command{
 }
 
 func init() {
-	CheckupCmd.Flags().BoolVar(&showOSInfo, "os", false, "是否输出系统信息")
+	CheckupCmd.Flags().BoolVar(&showOSInfo, "os", false, "Whether to output system information")
 	RootCmd.AddCommand(CheckupCmd)
 }

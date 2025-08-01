@@ -32,7 +32,7 @@ RestartPreventExitStatus=1
 Environment=MYSQLD_PARENT_PID=1
 
 
-ExecStart={{INSTALL_PREFIX}}/mysql/bin/mysqld --defaults-file=/etc/my.cnf --datadir={{DATA_DIR}}
+ExecStart={{INSTALL_PREFIX}}/mysql/bin/mysqld --defaults-file=/etc/my.cnf --datadir={{DATA_DIR}} $MYSQLD_OPTS
 
 ExecStop=/bin/kill -s QUIT $MAINPID
 

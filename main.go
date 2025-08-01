@@ -21,7 +21,7 @@
 package main
 
 import (
-	"github.com/kevinbin/mydba/cmd"
+	"github.com/kevinbin/mysqldba/cmd"
 )
 
 func main() {

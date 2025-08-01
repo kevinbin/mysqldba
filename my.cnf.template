@@ -52,6 +52,6 @@ skip-name-resolve
 explicit_defaults_for_timestamp=ON
 
 # SSL Settings
-ssl-ca={{DATA_DIR}}/ca.pem
-ssl-cert={{DATA_DIR}}/server-cert.pem
-ssl-key={{DATA_DIR}}/server-key.pem
+#ssl-ca={{DATA_DIR}}/ca.pem
+#ssl-cert={{DATA_DIR}}/server-cert.pem
+#ssl-key={{DATA_DIR}}/server-key.pem

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -55,6 +56,21 @@ func (c *SSHClient) Run(cmd string) (string, error) {
 	defer session.Close()
 	output, err := session.CombinedOutput(cmd)
 	return string(output), err
+}
+
+func (c *SSHClient) RunWithStream(cmd string, outputWriter io.Writer) error {
+	session, err := c.Client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+
+	session.Stdout = outputWriter
+	session.Stderr = outputWriter
+
+	// 启动命令并实时输出
+	err = session.Run(cmd)
+	return err
 }
 
 func (c *SSHClient) CopyFile(localPath, remotePath string) error {

@@ -50,18 +50,14 @@ var sshConfig SSHConfig
 // sshCmd represents the ssh command
 var sshCmd = &cobra.Command{
 	Use:   "ssh",
-	Short: "SSH批量操作工具",
-	Long: `SSH批量操作工具，提供以下功能：
-- 批量设置SSH免密登录
-- 批量执行SSH命令
-- 批量传输文件`,
+	Short: "SSH batch operation",
 }
 
 // sshSetupCmd represents the ssh setup command for setting up passwordless SSH
 var sshSetupCmd = &cobra.Command{
 	Use:   "setup",
-	Short: "批量设置SSH免密登录",
-	Long:  `批量设置SSH免密登录，读取主机列表文件并设置SSH免密登录`,
+	Short: "Batch setup SSH passwordless login",
+	Long:  `Batch setup SSH passwordless login, read host list file and setup SSH passwordless login`,
 	Run: func(cmd *cobra.Command, args []string) {
 		hosts, err := loadSSHHosts()
 		if err != nil {
@@ -82,8 +78,8 @@ var sshSetupCmd = &cobra.Command{
 // sshExecCmd represents the ssh exec command for executing commands on multiple hosts
 var sshExecCmd = &cobra.Command{
 	Use:   "exec",
-	Short: "批量执行SSH命令",
-	Long:  `批量执行SSH命令，在多台主机上并行执行指定的命令`,
+	Short: "Batch execute SSH commands",
+	Long:  `Batch execute SSH commands, execute specified commands in parallel on multiple hosts`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if sshConfig.Command == "" {
 			fmt.Printf("%s\n", aurora.Red("请指定要执行的命令"))
@@ -104,8 +100,8 @@ var sshExecCmd = &cobra.Command{
 // sshCopyCmd represents the ssh copy command for copying files to multiple hosts
 var sshCopyCmd = &cobra.Command{
 	Use:   "copy",
-	Short: "批量传输文件",
-	Long:  `批量传输文件，将本地文件或目录复制到多台远程主机`,
+	Short: "Batch transfer files",
+	Long:  `Batch transfer files, copy local files or directories to multiple remote hosts`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if sshConfig.LocalFile == "" {
 			fmt.Printf("%s\n", aurora.Red("请指定要传输的本地文件或目录"))
@@ -135,20 +131,20 @@ func init() {
 	sshCmd.AddCommand(sshCopyCmd)
 
 	// 全局标志
-	sshCmd.PersistentFlags().StringVarP(&sshConfig.HostFile, "host-file", "f", "hosts.txt", "主机列表文件")
-	sshCmd.PersistentFlags().StringVar(&sshConfig.SSHUser, "ssh-user", "root", "SSH用户名")
-	sshCmd.PersistentFlags().IntVar(&sshConfig.SSHPort, "ssh-port", 22, "SSH端口")
-	sshCmd.PersistentFlags().StringVarP(&sshConfig.SSHKeyPath, "ssh-key", "k", os.Getenv("HOME")+"/.ssh/id_rsa", "SSH私钥路径")
-	sshCmd.PersistentFlags().IntVarP(&sshConfig.Timeout, "timeout", "t", 30, "SSH操作超时时间(秒)")
-	sshCmd.PersistentFlags().IntVarP(&sshConfig.Parallel, "parallel", "n", 5, "最大并行执行数")
+	sshCmd.PersistentFlags().StringVarP(&sshConfig.HostFile, "host-file", "f", "hosts.txt", "Host list file")
+	sshCmd.PersistentFlags().StringVar(&sshConfig.SSHUser, "ssh-user", "root", "SSH username")
+	sshCmd.PersistentFlags().IntVar(&sshConfig.SSHPort, "ssh-port", 22, "SSH port")
+	sshCmd.PersistentFlags().StringVarP(&sshConfig.SSHKeyPath, "ssh-key", "k", os.Getenv("HOME")+"/.ssh/id_rsa", "SSH private key path")
+	sshCmd.PersistentFlags().IntVarP(&sshConfig.Timeout, "timeout", "t", 30, "SSH operation timeout (seconds)")
+	sshCmd.PersistentFlags().IntVarP(&sshConfig.Parallel, "parallel", "n", 5, "Maximum parallel executions")
 
 	// exec子命令标志
-	sshExecCmd.Flags().StringVarP(&sshConfig.Command, "command", "c", "", "要执行的命令")
+	sshExecCmd.Flags().StringVarP(&sshConfig.Command, "command", "c", "", "Command to execute")
 	sshExecCmd.MarkFlagRequired("command")
 
 	// copy子命令标志
-	sshCopyCmd.Flags().StringVarP(&sshConfig.LocalFile, "local", "l", "", "本地文件路径")
-	sshCopyCmd.Flags().StringVarP(&sshConfig.RemotePath, "remote", "r", "", "远程目标路径")
+	sshCopyCmd.Flags().StringVarP(&sshConfig.LocalFile, "local", "l", "", "Local file path")
+	sshCopyCmd.Flags().StringVarP(&sshConfig.RemotePath, "remote", "r", "", "Remote target path")
 	sshCopyCmd.MarkFlagRequired("local")
 	sshCopyCmd.MarkFlagRequired("remote")
 }
